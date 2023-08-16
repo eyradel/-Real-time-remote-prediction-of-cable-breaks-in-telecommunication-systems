@@ -8,13 +8,7 @@ import numpy as np
 import plotly.graph_objects as go
 st.set_page_config(page_title="FINAL YEAR PROJECT")
 import plotly.express as px
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import accuracy_score
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
+
 import joblib
 import numpy as np
 
