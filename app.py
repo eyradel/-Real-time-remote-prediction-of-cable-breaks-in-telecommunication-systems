@@ -1,25 +1,9 @@
 import streamlit as st
-import plotly.graph_objects as go
-import streamlit as st
-
-
+import numpy as np
+import hashlib
+import sqlite3
+from scipy.optimize import linear_sum_assignment
 import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-st.set_page_config(page_title="FINAL YEAR PROJECT")
-import plotly.express as px
-
-import numpy as np
-
-session_state = st.session_state
-# session_state.cache = True
-data = pd.read_excel(r"mult.xlsx")
-x = list(data['Distance km'])
-y = list(data['Loss dB'])
-
-distance = x
-attenuation = y 
-
 st.markdown(
     '<link href="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.19.1/css/mdb.min.css" rel="stylesheet">',
     unsafe_allow_html=True,
@@ -32,78 +16,235 @@ st.markdown("""""", unsafe_allow_html=True)
 
 hide_streamlit_style = """
             <style>
-    
                 header{visibility:hidden;}
                 .main {
-                    margin-top: -10px;
-                    padding-top:20px;
-                    
+                    margin-top: -20px;
+                    padding-top:10px;
                 }
                 #MainMenu {visibility: hidden;}
                 footer {visibility: hidden;}
-
             </style>
-            
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.markdown(
     """
-    <nav class="navbar fixed-top navbar-expand-lg navbar-dark" style="background-color:#4267B2;">
-    <a class="navbar-brand" href="#"  target="_blank"> OTDR REMOTE MONITOR</a>  
+    <nav class="navbar fixed-top navbar-expand-lg navbar-dark" style="background-color: #4267B2;">
+    <a class="navbar-brand" href="#"  target="_blank">UMaT Security</a>  
     </nav>
 """,
     unsafe_allow_html=True,
 )
 
-# Create scatter plot with break location pinpointing
-def plot_breakpoints():
-    fig = go.Figure()
+# Initialize SQLite database
+conn = sqlite3.connect("base.db")
+cursor = conn.cursor()
 
-    # Simulated data for demonstration
-    break_locations = []
-    breaks = []
-    for i in range(1, len(y)):
-        if y[i] - y[i-1] > 5:
-            breaks.append(x[i])
-            break_locations.append((x[i], y[i]))
-    for q in breaks:
-
-        st.markdown(f"<span class='card note alert alert-warning' style='font-size:24px'>The break is predicted to be at a distance of {q} meters.</span>",unsafe_allow_html=True)
-
-    # Scatter plot of data points
-    fig.add_trace(go.Scatter(
-        x=x, y=y,
-        name='Distance',
-        mode='lines+markers',
-        marker=dict(color='purple', size=10)
-    ))
-
-    # Highlighting the break locations
-    for loc in break_locations:
-        fig.add_trace(go.Scatter(
-            x=[loc[0]],
-            y=[loc[1]],
-            mode='markers',
-            name='Break Location',
-            marker=dict(color='red', size=15, symbol='triangle-up')
-        ))
-
-    # Configure layout and axes labels
-    fig.update_layout(
-        title="Distance(m) vs. Loss(Db)",
-        xaxis_title="Distance (meters)",
-        yaxis_title="Loss",
-        legend=dict(x=1.2, y=0.95)
+# Create a table to store the data
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS assignments (
+        id INTEGER PRIMARY KEY,
+        names TEXT,
+        dates TEXT,
+        times TEXT,
+        places TEXT
     )
+''')
 
-    st.plotly_chart(fig, use_container_width=True)
+def hungarian_algorithm_cost_matrix(names, dates, times, places):
+    # Create a cost matrix where each element represents the cost of assigning a person to a particular date, time, and place
+    num_people = len(names)
+    num_dates = len(dates)
+    num_times = len(times)
+    num_places = len(places)
+    
+    cost_matrix = np.zeros((num_people, num_dates, num_times, num_places))
+    for i, _ in enumerate(names):
+        for j, _ in enumerate(dates):
+            for k, _ in enumerate(times):
+                for l, _ in enumerate(places):
+                    # You can implement your own logic to calculate the cost based on preferences, distances, or other factors.
+                    # For this example, we will randomly generate costs.
+                    cost_matrix[i, j, k, l] = np.random.randint(1, 10) # Random cost between 1 and 10
+    
+    return cost_matrix
 
-# Call the function to generate the plot
-plot_breakpoints()
+def run_hungarian_algorithm(cost_matrix):
+    # Use the Hungarian algorithm to solve the assignment problem
+    row_ind, col_ind = linear_sum_assignment(cost_matrix.min(axis=(2, 3)))
+    return row_ind, col_ind
 
-# Create an expander for additional views
-with st.expander("Other view"):
-    # Include other views and visualizations here
-    pass  # Placeholder for additional content
+def main():
+    st.markdown(f"<span class='btn btn-primary btn-block ' style='border-radius:50px'>Job Allocation System</span>",unsafe_allow_html=True)
+    st.write("Enter the details of people and options for dates, times, and places.")
+    
+    names_input = st.text_area("Names (separated by commas)", "John, Alice, Bob, Sarah")
+    
+    dates_input = st.text_area("Dates (separated by commas)", "2023-07-20, 2023-07-21, 2023-07-22")
+    
+    times_input = st.text_area("Times (separated by commas)", "10:00 AM, 2:00 PM, 6:00 PM")
+    places_input = st.text_area("Places (separated by commas)", "Restaurant A, Restaurant B, Park C")
+
+    if st.button("Match"):
+        names = [name.strip() for name in names_input.split(",")]
+        dates = [date.strip() for date in dates_input.split(",")]
+        times = [time.strip() for time in times_input.split(",")]
+        places = [place.strip() for place in places_input.split(",")]
+        
+        st.sidebar.success("Data saved successfully!")
+        cost_matrix = hungarian_algorithm_cost_matrix(names, dates, times, places)
+        row_ind, col_ind = run_hungarian_algorithm(cost_matrix)
+        cursor.execute('INSERT INTO assignments (names, dates, times, places) VALUES (?, ?, ?, ?)', (names_input, dates_input, times_input, places_input))
+        conn.commit()
+        st.subheader("Matching Results:")
+        for i, person_index in enumerate(row_ind):
+            person_name = names[person_index]
+            date = dates[col_ind[i]]
+            time = times[col_ind[i]]
+            place = places[col_ind[i]]
+            # data = pd.DataFrame({
+            #     "Names":person_name,
+            #     "Date":date,
+            #     "Times":time,
+            #     "Place":place
+
+            # }, index=[0,1,2,3]) 
+            # st.write(data)
+
+            st.markdown(f"<span class='btn btn-primary' style='border-radius:50px'>{person_name}</span> -> Date: <span style='border-radius:50px' class='btn btn-primary'>{date}</span>, Time: <span style='border-radius:50px' class='btn btn-primary'>{time}</span>, Place: <span style='border-radius:50px' class='btn btn-primary'>{place}</span>",unsafe_allow_html=True)
+def update_assignment(assignment_id, names_input, dates_input, times_input, places_input):
+    # Update the assignment in the database
+    cursor.execute('''
+        UPDATE assignments
+        SET names=?, dates=?, times=?, places=?
+        WHERE id=?
+    ''', (names_input, dates_input, times_input, places_input, assignment_id))
+    conn.commit()
+def delete_assignment(assignment_id):
+    # Delete the assignment from the database
+    cursor.execute('DELETE FROM assignments WHERE id=?', (assignment_id,))
+    conn.commit()
+def view_and_edit():
+    # Retrieve the assignments from the database
+    cursor.execute('SELECT * FROM assignments')
+    assignments = cursor.fetchall()
+
+    # Show the assignments in the sidebar
+    
+    # selected_assignment = st.sidebar.selectbox("Select an Assignment", assignments)
+
+    # if selected_assignment:
+    #     # Display the selected assignment details in the main area
+    #     st.subheader("Selected Assignment Details:")
+    #     data = pd.DataFrame({
+    #             "Names":selected_assignment[1],
+    #             "Date":selected_assignment[2],
+    #             "Times":selected_assignment[3],
+    #             "Place":selected_assignment[4]
+
+    #         },index=["Row 1","Row 2","Row 3","Row 4"]) 
+    #     st.write(data)
+    #     # st.write(f"Names: {selected_assignment[1]}")
+    #     # st.write(f"Dates: {selected_assignment[2]}")
+    #     # st.write(f"Times: {selected_assignment[3]}")
+    #     # st.write(f"Places: {selected_assignment[4]}")
+    st.sidebar.markdown(f"<span class='btn btn-primary btn-block' style='border-radius:50px;'>View / Edit & Delete Assignments</span>",unsafe_allow_html=True)
+    
+    
+    selected_assignment = st.sidebar.selectbox("Select an Assignment to Edit", assignments)
+    
+    if selected_assignment:
+        assignment_id, names, dates, times, places = selected_assignment
+        st.subheader("Selected Assignment Details:")
+
+        data = pd.DataFrame({
+                "Names":names,
+                "Date":dates,
+                "Times":times,
+                "Place":places
+
+            },index=["Details"])
+        st.dataframe(data) 
+        # st.write(data)
+        # st.write(f"Names: {names}")
+        # st.write(f"Dates: {dates}")
+        # st.write(f"Times: {times}")
+        # st.write(f"Places: {places}")
+
+        with st.expander("Edit Assignment Details", expanded=True):
+            names_input = st.text_area("Names (separated by commas)", names)
+            dates_input = st.text_area("Dates (separated by commas)", dates)
+            times_input = st.text_area("Times (separated by commas)", times)
+            places_input = st.text_area("Places (separated by commas)", places)
+
+            update_button = st.button("Update Assignment")
+            if update_button:
+                update_assignment(assignment_id, names_input, dates_input, times_input, places_input)
+                st.sidebar.success("Assignment updated successfully!")
+        with st.expander("Delete Assignment", expanded=True):
+            delete_button = st.button("Delete Assignment")
+            if delete_button:
+                delete_assignment(assignment_id)
+                st.sidebar.success("Assignment deleted successfully!")
+def view_all_data():
+    # Retrieve all assignments from the database
+    cursor.execute('SELECT * FROM assignments')
+    all_assignments = cursor.fetchall()
+
+    # Show all assignments in the main area
+    st.subheader("All Assignments:")
+    for assignment in all_assignments:
+        data = pd.DataFrame({
+            "ID":assignment[0],
+            "Names":assignment[1],
+           " Dates":assignment[2],
+           "Times":assignment[3],
+           "Places":assignment[4]
+
+        },index=[""])
+    download = st.button("download data")
+    if download:
+        data.to_csv("Schedule.csv")
+    st.table(data)
+                               
+va = st.sidebar.checkbox("ViewAll")
+
+
+
+# if __name__ == "__main__":
+#     with st.container():
+        
+#         key = st.text_input("Secret Key", type="password")
+#         submit = st.button("Login")
+def skrr():
+    with st.expander("Operation"):
+        
+
+
+        check = st.checkbox("View / Edit / Delete")
+    if check:
+        view_and_edit()
+        if va:
+            view_all_data()
+    else:    
+        main()
+secret = st.text_input("Enter Password", type="password")
+code = "1235"
+if (secret== code):
+    skrr()
+    st.markdown("<span class='alert card alert-success'>Access Granted</span>",unsafe_allow_html=True)
+elif (secret is not code):
+    pass
+    #st.markdown("<span class='alert card alert-danger'>Wrong Code</span>",unsafe_allow_html=True)
+    
+# if submit:
+#     if key == "2468":
+#         main()
+  
+#         key = None
+#         submit = None
+#     else:
+#         st.markdown(
+#             f"<span class='btn btn-danger' style='border-radius:50px'>Wrong</span>",
+#             unsafe_allow_html=True,
 
