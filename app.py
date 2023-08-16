@@ -9,7 +9,6 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="FINAL YEAR PROJECT")
 import plotly.express as px
 
-import joblib
 import numpy as np
 
 session_state = st.session_state
